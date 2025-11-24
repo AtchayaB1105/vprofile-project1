@@ -1,36 +1,62 @@
 #!/bin/bash
-DATABASE_PASS='admin123'
-sudo yum update -y
-sudo yum install epel-release -y
-sudo yum install git zip unzip -y
-sudo yum install mariadb-server -y
 
+DBPASS="admin123"
 
-# starting & enabling mariadb-server
+######################################
+# Add MariaDB 10.5 Repo for AL2023
+######################################
+sudo tee /etc/yum.repos.d/MariaDB.repo > /dev/null <<EOF
+[mariadb]
+name=MariaDB
+baseurl=https://downloads.mariadb.com/MariaDB/mariadb-10.5/yum/rhel/9/x86_64/
+gpgcheck=0
+enabled=1
+module_hotfixes=1
+EOF
+
+######################################
+# Install packages
+######################################
+sudo dnf update -y
+sudo dnf install git zip unzip -y
+sudo dnf install MariaDB-server MariaDB-client -y
+sudo dnf install mariadb105-server -y
+
+######################################
+# Start MariaDB
+######################################
 sudo systemctl start mariadb
 sudo systemctl enable mariadb
-cd /tmp/
-git clone -b main https://github.com/hkhcoder/vprofile-project.git
-#restore the dump file for the application
-sudo mysqladmin -u root password "$DATABASE_PASS"
-sudo mysql -u root -p"$DATABASE_PASS" -e "DELETE FROM mysql.user WHERE User='root' AND Host NOT IN ('localhost', '127.0.0.1', '::1')"
-sudo mysql -u root -p"$DATABASE_PASS" -e "DELETE FROM mysql.user WHERE User=''"
-sudo mysql -u root -p"$DATABASE_PASS" -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\_%'"
-sudo mysql -u root -p"$DATABASE_PASS" -e "FLUSH PRIVILEGES"
-sudo mysql -u root -p"$DATABASE_PASS" -e "create database accounts"
-sudo mysql -u root -p"$DATABASE_PASS" -e "grant all privileges on accounts.* TO 'admin'@'localhost' identified by 'admin123'"
-sudo mysql -u root -p"$DATABASE_PASS" -e "grant all privileges on accounts.* TO 'admin'@'%' identified by 'admin123'"
-sudo mysql -u root -p"$DATABASE_PASS" accounts < /tmp/vprofile-project/src/main/resources/db_backup.sql
-sudo mysql -u root -p"$DATABASE_PASS" -e "FLUSH PRIVILEGES"
 
-# Restart mariadb-server
-sudo systemctl restart mariadb
+######################################
+# Set root password
+######################################
+mysql -u root <<EOF
+ALTER USER 'root'@'localhost' IDENTIFIED BY '$DBPASS';
+FLUSH PRIVILEGES;
+EOF
 
+######################################
+# Clone project
+######################################
+cd /tmp
+git clone -b local https://github.com/AtchayaB1105/vprofile-project1.git
 
-#starting the firewall and allowing the mariadb to access from port no. 3306
-sudo systemctl start firewalld
-sudo systemctl enable firewalld
-sudo firewall-cmd --get-active-zones
-sudo firewall-cmd --zone=public --add-port=3306/tcp --permanent
-sudo firewall-cmd --reload
-sudo systemctl restart mariadb
+######################################
+# Create DB and user
+######################################
+mysql -u root -p"$DBPASS" <<EOF
+CREATE DATABASE accounts;
+GRANT ALL PRIVILEGES ON accounts.* TO 'admin'@'localhost' IDENTIFIED BY 'admin123';
+FLUSH PRIVILEGES;
+EOF
+
+######################################
+# Import backup
+######################################
+mysql -u root -p"$DBPASS" accounts < /tmp/vprofile-project1/src/main/resources/db_backup.sql
+
+######################################
+# Final flush
+######################################
+mysql -u root -p"$DBPASS" -e "FLUSH PRIVILEGES;"
